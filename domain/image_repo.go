@@ -2,26 +2,30 @@ package domain
 
 import (
 	"context"
-	"example.com/imageProc/domain"
+	"errors"
 )
 
 type BuildImageOpts struct {
-	TenantOpts  domain.TenantOpts
 	Width       int
-	AspectRatio domain.AR
-	ImageType   domain.ImageType
+	AspectRatio AR
+	ImageType   ImageType
 }
 
 type GetImageOpts struct {
-	TenantOpts  domain.TenantOpts
+	TenantOpts  TenantOpts
+	IsPrimary   bool
 	Name        string
 	Width       int
-	AspectRatio domain.AR
-	Type        domain.ImageType
+	AspectRatio AR
+	Type        ImageType
 }
+
+var (
+	ErrImageNotFound = errors.New("image not found")
+)
 
 type ImageRepoInterface interface {
 	GetImage(ctx context.Context, opts GetImageOpts) ([]byte, error)
 	BuildImageOf(ctx context.Context, image []byte, opts BuildImageOpts) ([]byte, error)
-	CreateImage(ctx context.Context, image []byte, opts domain.TenantOpts) (string, error)
+	CreateImage(ctx context.Context, image []byte, opts TenantOpts) (string, error)
 }
