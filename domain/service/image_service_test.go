@@ -16,7 +16,7 @@ func TestUpload(t *testing.T) {
 		opts := domain.TenantOpts{}
 
 		mockRepo := new(persist.MockImageRepo)
-		mockRepo.On("CreateImage", ctx, img, opts).Return(imgName, nil)
+		mockRepo.On("CreateImage", ctx, img, true, "", opts).Return(imgName, nil)
 
 		svc := NewImageService(mockRepo)
 
@@ -59,9 +59,9 @@ func TestGetImage(t *testing.T) {
 
 		mockRepo := new(persist.MockImageRepo)
 		mockRepo.On("GetImage", ctx, domain.GetImageOpts{TenantOpts: tenantOpts, Name: imgName}).
-			Return([]byte{}, domain.ErrImageNotFound)
-		mockRepo.On("GetImage", ctx, domain.GetImageOpts{TenantOpts: tenantOpts, Name: imgName, IsPrimary: true}).
-			Return([]byte{}, domain.ErrImageNotFound)
+			Return([]byte{}, persist.ErrImageNotFound)
+		mockRepo.On("GetImage", ctx, domain.GetImageOpts{TenantOpts: tenantOpts, Name: imgName, IsParent: true}).
+			Return([]byte{}, persist.ErrImageNotFound)
 
 		svc := NewImageService(mockRepo)
 
@@ -80,13 +80,13 @@ func TestGetImage(t *testing.T) {
 
 		mockRepo := new(persist.MockImageRepo)
 		mockRepo.On("GetImage", ctx, domain.GetImageOpts{TenantOpts: tenantOpts, Name: imgName}).
-			Return([]byte{}, domain.ErrImageNotFound)
-		mockRepo.On("GetImage", ctx, domain.GetImageOpts{TenantOpts: tenantOpts, Name: imgName, IsPrimary: true}).
+			Return([]byte{}, persist.ErrImageNotFound)
+		mockRepo.On("GetImage", ctx, domain.GetImageOpts{TenantOpts: tenantOpts, Name: imgName, IsParent: true}).
 			Return(primaryImg, nil)
 		mockRepo.On("BuildImageOf", ctx, primaryImg, domain.BuildImageOpts{}).
 			Return(builtImg, nil)
-		mockRepo.On("CreateImage", ctx, builtImg, tenantOpts).
-			Return("", nil)
+		mockRepo.On("CreateImage", ctx, builtImg, false, imgName, tenantOpts).
+			Return(imgName, nil)
 
 		svc := NewImageService(mockRepo)
 

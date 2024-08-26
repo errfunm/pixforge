@@ -20,8 +20,8 @@ func (m *MockImageRepo) BuildImageOf(ctx context.Context, image []byte, opts dom
 	return args.Get(0).([]byte), args.Error(1)
 }
 
-func (m *MockImageRepo) CreateImage(ctx context.Context, image []byte, opts domain.TenantOpts) (string, error) {
-	args := m.Called(ctx, image, opts)
+func (m *MockImageRepo) CreateImage(ctx context.Context, image []byte, isParent bool, name string, opts domain.TenantOpts) (string, error) {
+	args := m.Called(ctx, image, isParent, name, opts)
 	return args.String(0), args.Error(1)
 }
 

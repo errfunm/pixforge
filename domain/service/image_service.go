@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"example.com/imageProc/domain"
+	"example.com/imageProc/infra/persist"
 )
 
 type GetImageOpts struct {
@@ -28,7 +29,7 @@ var (
 )
 
 func (i ImageService) Upload(ctx context.Context, imageByte []byte, tenantOpts domain.TenantOpts) (string, error) {
-	imgId, err := i.repo.CreateImage(ctx, imageByte, tenantOpts)
+	imgId, err := i.repo.CreateImage(ctx, imageByte, true, "", tenantOpts)
 	if err != nil {
 		return "", err
 	}
@@ -46,25 +47,25 @@ func (i ImageService) GetImage(ctx context.Context, opts GetImageOpts) ([]byte, 
 	if err == nil {
 		return img, nil
 	}
-	if !errors.Is(err, domain.ErrImageNotFound) {
+	if !errors.Is(err, persist.ErrImageNotFound) {
 		return nil, err
 	}
 
-	primaryImg, err := i.repo.GetImage(ctx, domain.GetImageOpts{
+	parentImg, err := i.repo.GetImage(ctx, domain.GetImageOpts{
 		TenantOpts:  opts.tenantOpts,
-		IsPrimary:   true,
+		IsParent:    true,
 		Name:        opts.Name,
 		Width:       opts.Width,
 		AspectRatio: opts.Ar,
 		Type:        opts.Type,
 	})
 	if err != nil {
-		if errors.Is(err, domain.ErrImageNotFound) {
+		if errors.Is(err, persist.ErrImageNotFound) {
 			return nil, ErrNotFound
 		}
 		return nil, err
 	}
-	builtImage, err := i.repo.BuildImageOf(ctx, primaryImg, domain.BuildImageOpts{
+	builtImage, err := i.repo.BuildImageOf(ctx, parentImg, domain.BuildImageOpts{
 		Width:       opts.Width,
 		AspectRatio: opts.Ar,
 		ImageType:   opts.Type,
@@ -74,7 +75,7 @@ func (i ImageService) GetImage(ctx context.Context, opts GetImageOpts) ([]byte, 
 	}
 
 	// cache image before return
-	_, err = i.repo.CreateImage(ctx, builtImage, opts.tenantOpts)
+	_, err = i.repo.CreateImage(ctx, builtImage, false, opts.Name, opts.tenantOpts)
 	if err != nil {
 		return nil, err
 	}
