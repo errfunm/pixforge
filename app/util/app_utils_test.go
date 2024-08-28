@@ -3,6 +3,7 @@ package util
 import (
 	"example.com/imageProc/domain"
 	"github.com/stretchr/testify/assert"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -93,5 +94,5 @@ func TestFullImageAddr(t *testing.T) {
 func TestGenerateImageName(t *testing.T) {
 	nowNano := time.Now().Nanosecond()
 	res := GenerateImageName()
-	assert.Equal(t, string(rune(nowNano)), res)
+	assert.Equal(t, strconv.Itoa(nowNano), res)
 }

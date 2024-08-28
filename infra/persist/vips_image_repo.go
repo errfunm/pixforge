@@ -13,10 +13,7 @@ type vipsImageRepo struct {
 	baseDir string
 }
 
-func (i vipsImageRepo) GetImage(ctx context.Context, opts domain.GetImageOpts) ([]byte, error) {
-	vips.Startup(nil)
-	defer vips.Shutdown()
-
+func (i vipsImageRepo) GetImage(ctx context.Context, opts domain.RepoGetImageOpts) ([]byte, error) {
 	var path string
 	if opts.IsParent {
 		path = util.ResolveStoragePath(i.baseDir, opts.TenantOpts, opts.Name, true, util.ChildPathOpts{})
@@ -31,21 +28,25 @@ func (i vipsImageRepo) GetImage(ctx context.Context, opts domain.GetImageOpts) (
 	fullPath := util.FullImageAddr(path, opts.Name, opts.Type.String())
 	imgRef, err := vips.NewImageFromFile(fullPath)
 	if err != nil {
-		return nil, err
+		return nil, ErrImageNotFound
 	}
-	bytes, err := imgRef.ToBytes()
+	imgType, err := domain.ImageTypeFromString(imgRef.Format().FileExt())
 	if err != nil {
 		return nil, err
 	}
-	return bytes, nil
+	byteImg, _, err := exportImage(imgRef, imgType)
+	if err != nil {
+		return nil, err
+	}
+	return byteImg, nil
 }
 
 func (i vipsImageRepo) BuildImageOf(ctx context.Context, image []byte, opts domain.BuildImageOpts) ([]byte, error) {
-	vips.Startup(nil)
-	defer vips.Shutdown()
-
 	imgRef, err := vips.NewImageFromBuffer(image)
 	if err != nil {
+		if errors.Is(err, vips.ErrUnsupportedImageFormat) {
+			return nil, ErrUnSupportedImageFormat
+		}
 		return nil, err
 	}
 	// check if the aspect ratios are the same
@@ -101,9 +102,6 @@ func (i vipsImageRepo) BuildImageOf(ctx context.Context, image []byte, opts doma
 
 func (i vipsImageRepo) CreateImage(ctx context.Context, image []byte, isParent bool, name string, opts domain.TenantOpts) (string, error) {
 	var imgName, path string
-	vips.Startup(nil)
-	defer vips.Shutdown()
-
 	imgRef, err := vips.NewImageFromBuffer(image)
 	if err != nil {
 		return "", err

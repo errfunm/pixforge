@@ -71,29 +71,21 @@ func tearDownTestEnvironment() error {
 	return os.RemoveAll(baseDir + "/test")
 }
 
-//func TestGetImage(t *testing.T) {
-//	err := initTestEnvironment()
-//	if err != nil {
-//		panic(err)
-//	}
-//}
-
 func TestCreateImage(t *testing.T) {
 	t.Run("an image can be loaded with no error", func(t *testing.T) {
 		err := initTestEnvironment()
-		//defer func() {
-		//	err = tearDownTestEnvironment()
-		//	if err != nil {
-		//
-		//	}
-		//}()
+		defer func() {
+			err = tearDownTestEnvironment()
+			if err != nil {
+
+			}
+		}()
 		if err != nil {
 			panic(err)
 		}
 
-		// init repo
 		repo := NewVipsImageRepo(testEnviron)
-		// test input params
+
 		ctx := context.Background()
 		img, err := os.ReadFile(baseDir + "/testdata/tstimg1.jpg")
 		if err != nil {

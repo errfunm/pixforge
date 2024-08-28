@@ -8,7 +8,7 @@ import (
 )
 
 type GetImageOpts struct {
-	tenantOpts domain.TenantOpts
+	TenantOpts domain.TenantOpts
 	Name       string
 	Width      int
 	Ar         domain.AR
@@ -37,8 +37,8 @@ func (i ImageService) Upload(ctx context.Context, imageByte []byte, tenantOpts d
 }
 
 func (i ImageService) GetImage(ctx context.Context, opts GetImageOpts) ([]byte, error) {
-	img, err := i.repo.GetImage(ctx, domain.GetImageOpts{
-		TenantOpts:  opts.tenantOpts,
+	img, err := i.repo.GetImage(ctx, domain.RepoGetImageOpts{
+		TenantOpts:  opts.TenantOpts,
 		Name:        opts.Name,
 		Width:       opts.Width,
 		AspectRatio: opts.Ar,
@@ -51,8 +51,8 @@ func (i ImageService) GetImage(ctx context.Context, opts GetImageOpts) ([]byte, 
 		return nil, err
 	}
 
-	parentImg, err := i.repo.GetImage(ctx, domain.GetImageOpts{
-		TenantOpts:  opts.tenantOpts,
+	parentImg, err := i.repo.GetImage(ctx, domain.RepoGetImageOpts{
+		TenantOpts:  opts.TenantOpts,
 		IsParent:    true,
 		Name:        opts.Name,
 		Width:       opts.Width,
@@ -71,11 +71,13 @@ func (i ImageService) GetImage(ctx context.Context, opts GetImageOpts) ([]byte, 
 		ImageType:   opts.Type,
 	})
 	if err != nil {
+		if errors.Is(err, persist.ErrUnSupportedImageFormat) {
+			// TODO: internal error should be returned
+		}
 		return nil, err
 	}
-
 	// cache image before return
-	_, err = i.repo.CreateImage(ctx, builtImage, false, opts.Name, opts.tenantOpts)
+	_, err = i.repo.CreateImage(ctx, builtImage, false, opts.Name, opts.TenantOpts)
 	if err != nil {
 		return nil, err
 	}

@@ -35,7 +35,7 @@ func TestGetImage(t *testing.T) {
 		imgName := "test_image_name"
 		tenantOpts := domain.TenantOpts{}
 
-		repoGetImageOpts := domain.GetImageOpts{
+		repoGetImageOpts := domain.RepoGetImageOpts{
 			TenantOpts: tenantOpts,
 			Name:       imgName,
 		}
@@ -45,7 +45,7 @@ func TestGetImage(t *testing.T) {
 
 		svc := NewImageService(mockRepo)
 
-		fetchedImage, err := svc.GetImage(ctx, GetImageOpts{tenantOpts: tenantOpts, Name: imgName})
+		fetchedImage, err := svc.GetImage(ctx, GetImageOpts{TenantOpts: tenantOpts, Name: imgName})
 
 		assert.NoError(t, err)
 		assert.Equal(t, img, fetchedImage)
@@ -58,14 +58,14 @@ func TestGetImage(t *testing.T) {
 		tenantOpts := domain.TenantOpts{}
 
 		mockRepo := new(persist.MockImageRepo)
-		mockRepo.On("GetImage", ctx, domain.GetImageOpts{TenantOpts: tenantOpts, Name: imgName}).
+		mockRepo.On("GetImage", ctx, domain.RepoGetImageOpts{TenantOpts: tenantOpts, Name: imgName}).
 			Return([]byte{}, persist.ErrImageNotFound)
-		mockRepo.On("GetImage", ctx, domain.GetImageOpts{TenantOpts: tenantOpts, Name: imgName, IsParent: true}).
+		mockRepo.On("GetImage", ctx, domain.RepoGetImageOpts{TenantOpts: tenantOpts, Name: imgName, IsParent: true}).
 			Return([]byte{}, persist.ErrImageNotFound)
 
 		svc := NewImageService(mockRepo)
 
-		_, err := svc.GetImage(ctx, GetImageOpts{tenantOpts: tenantOpts, Name: imgName})
+		_, err := svc.GetImage(ctx, GetImageOpts{TenantOpts: tenantOpts, Name: imgName})
 
 		assert.ErrorIs(t, err, ErrNotFound)
 		mockRepo.AssertExpectations(t)
@@ -79,9 +79,9 @@ func TestGetImage(t *testing.T) {
 		builtImg := []byte("this is a brand new image built from primary version")
 
 		mockRepo := new(persist.MockImageRepo)
-		mockRepo.On("GetImage", ctx, domain.GetImageOpts{TenantOpts: tenantOpts, Name: imgName}).
+		mockRepo.On("GetImage", ctx, domain.RepoGetImageOpts{TenantOpts: tenantOpts, Name: imgName}).
 			Return([]byte{}, persist.ErrImageNotFound)
-		mockRepo.On("GetImage", ctx, domain.GetImageOpts{TenantOpts: tenantOpts, Name: imgName, IsParent: true}).
+		mockRepo.On("GetImage", ctx, domain.RepoGetImageOpts{TenantOpts: tenantOpts, Name: imgName, IsParent: true}).
 			Return(primaryImg, nil)
 		mockRepo.On("BuildImageOf", ctx, primaryImg, domain.BuildImageOpts{}).
 			Return(builtImg, nil)
@@ -90,7 +90,7 @@ func TestGetImage(t *testing.T) {
 
 		svc := NewImageService(mockRepo)
 
-		fetchedImg, err := svc.GetImage(ctx, GetImageOpts{tenantOpts: tenantOpts, Name: imgName})
+		fetchedImg, err := svc.GetImage(ctx, GetImageOpts{TenantOpts: tenantOpts, Name: imgName})
 
 		assert.NoError(t, err)
 		assert.Equal(t, builtImg, fetchedImg)

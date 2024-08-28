@@ -10,7 +10,7 @@ type BuildImageOpts struct {
 	ImageType   ImageType
 }
 
-type GetImageOpts struct {
+type RepoGetImageOpts struct {
 	TenantOpts  TenantOpts
 	IsParent    bool
 	Name        string
@@ -20,7 +20,7 @@ type GetImageOpts struct {
 }
 
 type ImageRepoInterface interface {
-	GetImage(ctx context.Context, opts GetImageOpts) ([]byte, error)
+	GetImage(ctx context.Context, opts RepoGetImageOpts) ([]byte, error)
 	BuildImageOf(ctx context.Context, image []byte, opts BuildImageOpts) ([]byte, error)
 	CreateImage(ctx context.Context, image []byte, isParent bool, name string, opts TenantOpts) (string, error)
 }

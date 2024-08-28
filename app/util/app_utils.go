@@ -32,5 +32,5 @@ func FullImageAddr(pathToImg string, name string, fileExt string) string {
 }
 
 func GenerateImageName() string {
-	return string(rune(time.Now().Nanosecond()))
+	return fmt.Sprintf("%d", time.Now().Nanosecond())
 }

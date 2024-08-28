@@ -10,7 +10,7 @@ type MockImageRepo struct {
 	mock.Mock
 }
 
-func (m *MockImageRepo) GetImage(ctx context.Context, opts domain.GetImageOpts) ([]byte, error) {
+func (m *MockImageRepo) GetImage(ctx context.Context, opts domain.RepoGetImageOpts) ([]byte, error) {
 	args := m.Called(ctx, opts)
 	return args.Get(0).([]byte), args.Error(1)
 }

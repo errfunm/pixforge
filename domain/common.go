@@ -59,7 +59,7 @@ func (imgT ImageType) String() string {
 	case ImageType_WEBP:
 		return "webp"
 	case ImageType_JPEG:
-		return "jpg"
+		return "jpeg"
 	case ImageType_PNG:
 		return "png"
 	default:
