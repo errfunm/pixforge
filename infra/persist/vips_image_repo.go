@@ -7,6 +7,7 @@ import (
 	"example.com/imageProc/domain"
 	"github.com/davidbyttow/govips/v2/vips"
 	"os"
+	"strings"
 )
 
 type vipsImageRepo struct {
@@ -14,18 +15,31 @@ type vipsImageRepo struct {
 }
 
 func (i vipsImageRepo) GetImage(ctx context.Context, opts domain.RepoGetImageOpts) ([]byte, error) {
-	var path string
+	var fullPath string
 	if opts.IsParent {
-		path = util.ResolveStoragePath(i.baseDir, opts.TenantOpts, opts.Name, true, util.ChildPathOpts{})
+		path := util.ResolveStoragePath(
+			i.baseDir,
+			opts.TenantOpts,
+			opts.Name,
+			true,
+			util.ChildPathOpts{},
+		)
+		parentImageName, err := util.FindImage(path, opts.Name+".")
+		if err != nil {
+			if errors.Is(err, util.ErrPathDoesNotExist) {
+				return nil, ErrImageNotFound
+			}
+			return nil, ErrInternal
+		}
+		fullPath = util.FullImageAddr(path, strings.Split(parentImageName, ".")[0], strings.Split(parentImageName, ".")[1])
 	} else {
-		path = util.ResolveStoragePath(i.baseDir, opts.TenantOpts, opts.Name, false, util.ChildPathOpts{
+		fullPath = util.FullImageAddr(util.ResolveStoragePath(i.baseDir, opts.TenantOpts, opts.Name, false, util.ChildPathOpts{
 			ImgType:  opts.Type,
 			ImgAR:    opts.AspectRatio,
 			ImgWidth: opts.Width,
-		})
+		}), opts.Name, opts.Type.String())
 	}
 
-	fullPath := util.FullImageAddr(path, opts.Name, opts.Type.String())
 	imgRef, err := vips.NewImageFromFile(fullPath)
 	if err != nil {
 		return nil, ErrImageNotFound

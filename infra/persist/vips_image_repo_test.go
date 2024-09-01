@@ -151,7 +151,7 @@ func TestCreateImage(t *testing.T) {
 
 	})
 
-	t.Run("an error should be returned if the image is invalid)", func(t *testing.T) {
+	t.Run("an error should be returned if the image is invalid", func(t *testing.T) {
 
 	})
 }
@@ -264,9 +264,8 @@ func TestGetImage(t *testing.T) {
 			},
 			{
 				tenantOpts:    domain.TenantOpts{TenantCode: "tsttnt2", OrgCode: "tstorg2"},
-				imgName:       "tstimg2",
+				imgName:       "tstimg", // actual image's type is tstimg
 				isParent:      true,
-				imgType:       domain.ImageType_WEBP, // actual image's type is domain.ImageType_AVIF
 				expectedError: ErrImageNotFound,
 			},
 			{

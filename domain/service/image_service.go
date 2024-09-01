@@ -52,12 +52,9 @@ func (i ImageService) GetImage(ctx context.Context, opts GetImageOpts) ([]byte, 
 	}
 
 	parentImg, err := i.repo.GetImage(ctx, domain.RepoGetImageOpts{
-		TenantOpts:  opts.TenantOpts,
-		IsParent:    true,
-		Name:        opts.Name,
-		Width:       opts.Width,
-		AspectRatio: opts.Ar,
-		Type:        opts.Type,
+		TenantOpts: opts.TenantOpts,
+		IsParent:   true,
+		Name:       opts.Name,
 	})
 	if err != nil {
 		if errors.Is(err, persist.ErrImageNotFound) {

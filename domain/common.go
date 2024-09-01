@@ -31,7 +31,7 @@ func ParseAspectRatio(str string) (AR, error) {
 		return AR{}, errors.New("not a valid aspect ratio")
 	}
 	for i := range arString {
-		_d, err := strconv.Atoi(arString[0])
+		_d, err := strconv.Atoi(arString[i])
 		if err != nil {
 			return AR{}, errors.New("not a valid aspect ratio")
 		}
