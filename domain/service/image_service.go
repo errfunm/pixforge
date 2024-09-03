@@ -10,9 +10,10 @@ import (
 type GetImageOpts struct {
 	TenantOpts domain.TenantOpts
 	Name       string
-	Width      int
-	Ar         domain.AR
-	Type       domain.ImageType
+	Width      *int
+	Height     *int
+	Ar         *domain.AR
+	Type       *domain.ImageType
 }
 
 type ImageServiceInterface interface {
@@ -41,6 +42,7 @@ func (i ImageService) GetImage(ctx context.Context, opts GetImageOpts) ([]byte, 
 		TenantOpts:  opts.TenantOpts,
 		Name:        opts.Name,
 		Width:       opts.Width,
+		Height:      opts.Height,
 		AspectRatio: opts.Ar,
 		Type:        opts.Type,
 	})
@@ -64,6 +66,7 @@ func (i ImageService) GetImage(ctx context.Context, opts GetImageOpts) ([]byte, 
 	}
 	builtImage, err := i.repo.BuildImageOf(ctx, parentImg, domain.BuildImageOpts{
 		Width:       opts.Width,
+		Height:      opts.Height,
 		AspectRatio: opts.Ar,
 		ImageType:   opts.Type,
 	})
@@ -86,4 +89,38 @@ func NewImageService(repo domain.ImageRepoInterface) ImageServiceInterface {
 	return ImageService{
 		repo: repo,
 	}
+}
+
+func (gio GetImageOpts) SetTenantOpts(tenantOpts domain.TenantOpts) GetImageOpts {
+	gio.TenantOpts = tenantOpts
+	return gio
+}
+
+func (gio GetImageOpts) SetName(name string) GetImageOpts {
+	gio.Name = name
+	return gio
+}
+
+func (gio GetImageOpts) SetWidth(width int) GetImageOpts {
+	gio.Width = &width
+	return gio
+}
+
+func (gio GetImageOpts) SetHeight(height int) GetImageOpts {
+	gio.Height = &height
+	return gio
+}
+
+func (gio GetImageOpts) SetAr(ar domain.AR) GetImageOpts {
+	gio.Ar = &ar
+	return gio
+}
+
+func (gio GetImageOpts) SetFormat(format domain.ImageType) GetImageOpts {
+	gio.Type = &format
+	return gio
+}
+
+func NewServiceGetImageOpts() GetImageOpts {
+	return GetImageOpts{}
 }

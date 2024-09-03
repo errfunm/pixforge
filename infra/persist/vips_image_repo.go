@@ -5,7 +5,9 @@ import (
 	"errors"
 	"example.com/imageProc/app/util"
 	"example.com/imageProc/domain"
+	"fmt"
 	"github.com/davidbyttow/govips/v2/vips"
+	"math"
 	"os"
 	"strings"
 )
@@ -15,40 +17,68 @@ type vipsImageRepo struct {
 }
 
 func (i vipsImageRepo) GetImage(ctx context.Context, opts domain.RepoGetImageOpts) ([]byte, error) {
-	var fullPath string
-	if opts.IsParent {
-		path := util.ResolveStoragePath(
-			i.baseDir,
-			opts.TenantOpts,
-			opts.Name,
-			true,
-			util.ChildPathOpts{},
-		)
-		parentImageName, err := util.FindImage(path, opts.Name+".")
-		if err != nil {
-			if errors.Is(err, util.ErrPathDoesNotExist) {
-				return nil, ErrImageNotFound
-			}
-			return nil, ErrInternal
-		}
-		fullPath = util.FullImageAddr(path, strings.Split(parentImageName, ".")[0], strings.Split(parentImageName, ".")[1])
-	} else {
-		fullPath = util.FullImageAddr(util.ResolveStoragePath(i.baseDir, opts.TenantOpts, opts.Name, false, util.ChildPathOpts{
-			ImgType:  opts.Type,
-			ImgAR:    opts.AspectRatio,
-			ImgWidth: opts.Width,
-		}), opts.Name, opts.Type.String())
-	}
+	var (
+		width, height int
+		format        domain.ImageType
+	)
 
-	imgRef, err := vips.NewImageFromFile(fullPath)
+	path := util.ResolveStoragePath(
+		i.baseDir,
+		opts.TenantOpts,
+		opts.Name,
+		true,
+		util.ChildPathOpts{},
+	)
+	parentImageName, err := util.FindImage(path, opts.Name+".")
+	if err != nil {
+		if errors.Is(err, util.ErrPathDoesNotExist) {
+			return nil, ErrImageNotFound
+		}
+		return nil, ErrInternal
+	}
+	fullPath := util.FullImageAddr(path, strings.Split(parentImageName, ".")[0], strings.Split(parentImageName, ".")[1])
+
+	parentImageRef, err := vips.NewImageFromFile(fullPath)
 	if err != nil {
 		return nil, ErrImageNotFound
 	}
-	imgType, err := domain.ImageTypeFromString(imgRef.Format().FileExt())
-	if err != nil {
-		return nil, err
+
+	if opts.IsParent {
+		imgType, err := domain.ImageTypeFromString(parentImageRef.Format().FileExt())
+		if err != nil {
+			return nil, err
+		}
+
+		byteImg, _, err := exportImage(parentImageRef, imgType)
+		if err != nil {
+			return nil, err
+		}
+		return byteImg, nil
 	}
-	byteImg, _, err := exportImage(imgRef, imgType)
+
+	width, height = determineDimensions(opts.Width, opts.Height, opts.AspectRatio, parentImageRef.Width(), parentImageRef.Height())
+
+	if opts.Type == nil {
+		format, err = domain.ImageTypeFromString(parentImageRef.Format().FileExt())
+		if err != nil {
+			return nil, ErrInternal
+		}
+	} else {
+		format = *opts.Type
+	}
+
+	fullPath = util.FullImageAddr(util.ResolveStoragePath(i.baseDir, opts.TenantOpts, opts.Name, false, util.ChildPathOpts{
+		ImgType:  format,
+		ImgAR:    domain.NewAspectRatioFrom(width, height),
+		ImgWidth: width,
+	}), opts.Name, format.String())
+
+	childImageRef, err := vips.NewImageFromFile(fullPath)
+	if err != nil {
+		return nil, ErrImageNotFound
+	}
+
+	byteImg, _, err := exportImage(childImageRef, format)
 	if err != nil {
 		return nil, err
 	}
@@ -63,55 +93,38 @@ func (i vipsImageRepo) BuildImageOf(ctx context.Context, image []byte, opts doma
 		}
 		return nil, err
 	}
-	// check if the aspect ratios are the same
-	if domain.NewAspectRatioFrom(imgRef.Width(), imgRef.Height()) == opts.AspectRatio {
-		scale := float64(opts.Width) / float64(imgRef.Width())
-		if err = imgRef.Resize(scale, vips.KernelAuto); err != nil {
-			return nil, err
-		}
-		builtImage, _, err := exportImage(imgRef, opts.ImageType)
-		if err != nil {
-			return nil, err
-		}
-		return builtImage, nil
-	}
-	// if not : do combination of resize and crop
-	h := (opts.Width / opts.AspectRatio.Width) * opts.AspectRatio.Height
+	originalWidth := imgRef.Width()
+	originalHeight := imgRef.Height()
+	var newWidth, newHeight int
 
-	if opts.Width >= h {
-		s := float64(opts.Width) / float64(imgRef.Width())
-		err = imgRef.Resize(s, vips.KernelAuto)
-		if err != nil {
-			return nil, err
-		}
+	newWidth, newHeight = determineDimensions(opts.Width, opts.Height, opts.AspectRatio, originalWidth, originalHeight)
 
-		if h > imgRef.Height() {
-			return nil, errors.New("not enough to crop from height")
-		}
-		remainderHeight := imgRef.Height() - h
-		err = imgRef.Crop(0, remainderHeight/2, imgRef.Width(), h)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		s := float64(h) / float64(imgRef.Height())
-		err = imgRef.Resize(s, vips.KernelAuto)
-		if err != nil {
-			return nil, err
-		}
-
-		if opts.Width > imgRef.Width() {
-			return nil, errors.New("not enough to crop from the width")
-		}
-		remainderWidth := imgRef.Width() - opts.Width
-		err = imgRef.Crop(remainderWidth/2, 0, opts.Width, imgRef.Height())
-	}
-
-	builtImage, _, err := exportImage(imgRef, opts.ImageType)
+	scale := calculateScale(originalWidth, originalHeight, &newWidth, &newHeight)
+	err = imgRef.Resize(scale, vips.KernelAuto)
 	if err != nil {
 		return nil, err
 	}
-	return builtImage, nil
+
+	centeredImage, err := cropCenter(imgRef, newWidth, newHeight)
+	if err != nil {
+		return nil, err
+	}
+
+	var newImageFormat domain.ImageType
+	if opts.ImageType == nil {
+		newImageFormat, err = domain.ImageTypeFromString(imgRef.Format().FileExt())
+		if err != nil {
+			return nil, ErrInternal
+		}
+	} else {
+		newImageFormat = *opts.ImageType
+	}
+
+	newImage, _, err := exportImage(centeredImage, newImageFormat)
+	if err != nil {
+		return nil, err
+	}
+	return newImage, nil
 }
 
 func (i vipsImageRepo) CreateImage(ctx context.Context, image []byte, isParent bool, name string, opts domain.TenantOpts) (string, error) {
@@ -177,4 +190,87 @@ func exportImage(imageRef *vips.ImageRef, imgType domain.ImageType) ([]byte, *vi
 		return nil, nil, err
 	}
 	return image, imageMetaData, nil
+}
+
+func calculateScale(originalWidth, originalHeight int, targetWidth, targetHeight *int) float64 {
+	switch {
+	case targetWidth != nil && targetHeight != nil:
+		scaleWidth := float64(*targetWidth) / float64(originalWidth)
+		scaleHeight := float64(*targetHeight) / float64(originalHeight)
+		return math.Max(scaleWidth, scaleHeight)
+	case targetWidth != nil:
+		return float64(*targetWidth) / float64(originalWidth)
+	case targetHeight != nil:
+		return float64(*targetHeight) / float64(originalHeight)
+	default:
+		return 1.0
+	}
+}
+
+func cropCenter(image *vips.ImageRef, targetWidth, targetHeight int) (*vips.ImageRef, error) {
+	var err error
+	switch {
+	case image.Width() == targetWidth && image.Height() == targetHeight:
+		return image, nil
+	case image.Width() == targetWidth:
+		remainder := image.Height() - targetHeight
+		// TODO: check if remainder < 0
+		err = image.Crop(0, remainder/2, image.Width(), targetHeight)
+	case image.Height() == targetHeight:
+		remainder := image.Width() - targetWidth
+		// TODO: check if remainder < 0
+		err = image.Crop(remainder/2, 0, targetWidth, image.Height())
+	default:
+		err = fmt.Errorf("error while center cropping original: %d*%d, target:%d*%d", image.Width(),
+			image.Height(), targetWidth, targetHeight)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return image, nil
+}
+
+func determineDimensions(targetWidth, targetHeight *int, targetAr *domain.AR, originalDimensions ...int) (int, int) {
+	originalWidth := originalDimensions[0]
+	originalHeight := originalDimensions[1]
+
+	originalAr := domain.NewAspectRatioFrom(originalWidth, originalHeight)
+	var newWidth, newHeight int
+	switch {
+	case targetWidth != nil && targetHeight != nil && targetAr != nil:
+		if math.Abs(float64(*targetWidth)/float64(*targetHeight)-targetAr.Float64()) < 1e-6 {
+			newWidth = *targetWidth
+			newHeight = *targetHeight
+		} else {
+			newWidth = *targetWidth
+			newHeight = int(math.Round(float64(newWidth) / targetAr.Float64()))
+		}
+	case targetWidth != nil && targetHeight == nil && targetAr == nil:
+		newWidth = *targetWidth
+		newHeight = int(math.Round(float64(newWidth) / originalAr.Float64()))
+	case targetWidth == nil && targetHeight != nil && targetAr == nil:
+		newHeight = *targetHeight
+		newWidth = int(math.Round(float64(newHeight) * originalAr.Float64()))
+	case targetWidth == nil && targetHeight == nil && targetAr != nil:
+		if originalAr.Float64() > targetAr.Float64() {
+			newHeight = originalHeight
+			newWidth = int(math.Round(float64(newHeight) * targetAr.Float64()))
+		} else {
+			newWidth = originalWidth
+			newHeight = int(math.Round(float64(newWidth) / targetAr.Float64()))
+		}
+	case targetWidth != nil && targetHeight == nil && targetAr != nil:
+		newWidth = *targetWidth
+		newHeight = int(math.Round(float64(newWidth) / targetAr.Float64()))
+	case targetWidth == nil && targetHeight != nil && targetAr != nil:
+		newHeight = *targetHeight
+		newWidth = int(math.Round(float64(newHeight) * targetAr.Float64()))
+	case targetWidth != nil && targetHeight != nil && targetAr == nil:
+		newWidth = *targetWidth
+		newHeight = *targetHeight
+	case targetWidth == nil && targetHeight == nil && targetAr == nil:
+		newWidth = originalWidth
+		newHeight = originalHeight
+	}
+	return newWidth, newHeight
 }

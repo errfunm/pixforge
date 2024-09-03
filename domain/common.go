@@ -16,6 +16,10 @@ func (ar AR) String() string {
 	return fmt.Sprintf("%d:%d", ar.Width, ar.Height)
 }
 
+func (ar AR) Float64() float64 {
+	return float64(ar.Width) / float64(ar.Height)
+}
+
 func NewAspectRatioFrom(width int, height int) AR {
 	gcf := GreatCommonFactor(width, height)
 	return AR{

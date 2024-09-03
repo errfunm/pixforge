@@ -21,13 +21,26 @@ type httpService struct {
 	imageSvc domainsvc.ImageServiceInterface
 }
 
-func (h httpService) GetImage(c echo.Context) error {
-	queryPrms := c.QueryParams()
+var (
+	ErrInvalidAspectRatio = errors.New("invalid aspect ratio")
+	ErrInvalidWidth       = errors.New("invalid width")
+	ErrInvalidHeight      = errors.New("invalid height")
+)
 
+func (h httpService) GetImage(c echo.Context) error {
 	imgName := c.Param("imgName")
 
+	queryPrms := c.QueryParams()
+	ar := queryPrms.Get("ar")
+	width := queryPrms.Get("width")
+	height := queryPrms.Get("height")
 	tenantCode := queryPrms.Get("tenant-code")
 	orgCode := queryPrms.Get("org-code")
+
+	getImgOpts, err := prepareGetImageOpts(width, height, ar)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
 
 	if tenantCode == "" || orgCode == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "tenant-code and org-code are required")
@@ -37,33 +50,21 @@ func (h httpService) GetImage(c echo.Context) error {
 		OrgCode:    queryPrms.Get("org-code"),
 	}
 
-	// get image aspect ratio and width from query params
-	ar, err := domain.ParseAspectRatio(queryPrms.Get("ar"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid aspect ratio")
-	}
-	width, err := strconv.Atoi(queryPrms.Get("width"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid width")
-	}
 	// get image type from accepts header
 	acceptHeader := c.Request().Header.Get("accept")
-	imgType := distinguishImageType(strings.Split(acceptHeader, ","))
+	_imgType := distinguishImageType(strings.Split(acceptHeader, ","))
 
-	image, err := h.imageSvc.GetImage(context.Background(), domainsvc.GetImageOpts{
-		TenantOpts: tenantOpts,
-		Name:       imgName,
-		Width:      width,
-		Ar:         ar,
-		Type:       imgType,
-	})
+	opts := domainsvc.NewServiceGetImageOpts()
+	opts = getImgOpts.SetFormat(_imgType).SetTenantOpts(tenantOpts).SetName(imgName)
+
+	image, err := h.imageSvc.GetImage(context.Background(), opts)
 	if err != nil {
 		if errors.Is(err, domainsvc.ErrNotFound) {
 			return echo.NewHTTPError(http.StatusBadRequest, "image not found")
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "error fetching image").SetInternal(err)
 	}
-	return c.Blob(http.StatusOK, contentTypeString(imgType), image)
+	return c.Blob(http.StatusOK, contentTypeString(_imgType), image)
 }
 
 func (h httpService) UploadImage(c echo.Context) error {
@@ -137,4 +138,73 @@ func contentTypeString(imgType domain.ImageType) string {
 	default:
 		return ""
 	}
+}
+
+func prepareGetImageOpts(width, height, ar string) (domainsvc.GetImageOpts, error) {
+	svcGetImgOpts := domainsvc.NewServiceGetImageOpts()
+	switch {
+	case width != "" && height != "" && ar != "":
+		validAr, err := domain.ParseAspectRatio(ar)
+		if err != nil {
+			return svcGetImgOpts, ErrInvalidAspectRatio
+		}
+		validWidth, err := strconv.Atoi(width)
+		if err != nil {
+			return svcGetImgOpts, ErrInvalidWidth
+		}
+		validHeight, err := strconv.Atoi(height)
+		if err != nil {
+			return svcGetImgOpts, ErrInvalidHeight
+		}
+		svcGetImgOpts = svcGetImgOpts.SetWidth(validWidth).SetHeight(validHeight).SetAr(validAr)
+	case width != "" && height == "" && ar == "":
+		validWidth, err := strconv.Atoi(width)
+		if err != nil {
+			return svcGetImgOpts, ErrInvalidWidth
+		}
+		svcGetImgOpts = svcGetImgOpts.SetWidth(validWidth)
+	case width == "" && height != "" && ar == "":
+		validHeight, err := strconv.Atoi(height)
+		if err != nil {
+			return svcGetImgOpts, ErrInvalidHeight
+		}
+		svcGetImgOpts = svcGetImgOpts.SetHeight(validHeight)
+	case width == "" && height == "" && ar != "":
+		validAr, err := domain.ParseAspectRatio(ar)
+		if err != nil {
+			return svcGetImgOpts, ErrInvalidAspectRatio
+		}
+		svcGetImgOpts = svcGetImgOpts.SetAr(validAr)
+	case width != "" && height != "" && ar == "":
+		validWidth, err := strconv.Atoi(width)
+		if err != nil {
+			return svcGetImgOpts, ErrInvalidWidth
+		}
+		validHeight, err := strconv.Atoi(height)
+		if err != nil {
+			return svcGetImgOpts, ErrInvalidHeight
+		}
+		svcGetImgOpts = svcGetImgOpts.SetWidth(validWidth).SetHeight(validHeight)
+	case width != "" && height == "" && ar != "":
+		validWidth, err := strconv.Atoi(width)
+		if err != nil {
+			return svcGetImgOpts, ErrInvalidWidth
+		}
+		validAr, err := domain.ParseAspectRatio(ar)
+		if err != nil {
+			return svcGetImgOpts, ErrInvalidAspectRatio
+		}
+		svcGetImgOpts = svcGetImgOpts.SetWidth(validWidth).SetAr(validAr)
+	case width == "" && height != "" && ar != "":
+		validHeight, err := strconv.Atoi(height)
+		if err != nil {
+			return svcGetImgOpts, ErrInvalidHeight
+		}
+		validAr, err := domain.ParseAspectRatio(ar)
+		if err != nil {
+			return svcGetImgOpts, ErrInvalidAspectRatio
+		}
+		svcGetImgOpts = svcGetImgOpts.SetHeight(validHeight).SetAr(validAr)
+	}
+	return svcGetImgOpts, nil
 }

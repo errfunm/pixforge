@@ -170,37 +170,35 @@ func TestGetImage(t *testing.T) {
 		}
 
 		testCases := []struct {
-			imgName          string
-			imgType          domain.ImageType
-			imgWidth         int
-			imgAspectRatio   domain.AR
-			isParent         bool
-			tenantOpts       domain.TenantOpts
+			opts             domain.RepoGetImageOpts
 			expectedImageDir string
 		}{
 			{
-				tenantOpts:       domain.TenantOpts{TenantCode: "tsttnt1", OrgCode: "tstorg1"},
-				imgName:          "tstimg1",
-				isParent:         false,
-				imgType:          domain.ImageType_JPEG,
-				imgWidth:         100,
-				imgAspectRatio:   domain.AR{Width: 3, Height: 4},
+				opts: domain.NewRepoGetImageOpts().
+					SetTenantOpts(domain.TenantOpts{TenantCode: "tsttnt1", OrgCode: "tstorg1"}).
+					SetName("tstimg1").
+					SetIsParent(false).
+					SetFormat(domain.ImageType_JPEG).
+					SetWidth(100).
+					SetAr(domain.NewAspectRatioFrom(3, 4)),
 				expectedImageDir: fmt.Sprintf("%s/%s-%s/%s/%s/%s/%s", testEnviron, "tsttnt1", "tstorg1", "tstimg1", "jpeg", "3:4", "100"),
 			},
 			{
-				tenantOpts:       domain.TenantOpts{TenantCode: "tsttnt2", OrgCode: "tstorg2"},
-				imgName:          "tstimg2",
-				isParent:         true,
-				imgType:          domain.ImageType_AVIF,
+				opts: domain.NewRepoGetImageOpts().
+					SetTenantOpts(domain.TenantOpts{TenantCode: "tsttnt2", OrgCode: "tstorg2"}).
+					SetName("tstimg2").
+					SetIsParent(true).
+					SetFormat(domain.ImageType_AVIF),
 				expectedImageDir: fmt.Sprintf("%s/%s-%s/%s", testEnviron, "tsttnt2", "tstorg2", "tstimg2"),
 			},
 			{
-				tenantOpts:       domain.TenantOpts{TenantCode: "tsttnt2", OrgCode: "tstorg2"},
-				imgName:          "tstimg2",
-				isParent:         false,
-				imgType:          domain.ImageType_AVIF,
-				imgWidth:         500,
-				imgAspectRatio:   domain.AR{Width: 1, Height: 1},
+				opts: domain.NewRepoGetImageOpts().
+					SetTenantOpts(domain.TenantOpts{TenantCode: "tsttnt2", OrgCode: "tstorg2"}).
+					SetName("tstimg2").
+					SetIsParent(false).
+					SetFormat(domain.ImageType_AVIF).
+					SetWidth(500).
+					SetAr(domain.NewAspectRatioFrom(1, 1)),
 				expectedImageDir: fmt.Sprintf("%s/%s-%s/%s/%s/%s/%s", testEnviron, "tsttnt2", "tstorg2", "tstimg2", "avif", "1:1", "500"),
 			},
 		}
@@ -208,24 +206,16 @@ func TestGetImage(t *testing.T) {
 		repo := NewVipsImageRepo(testEnviron)
 
 		for _, tc := range testCases {
-			image, err := repo.GetImage(context.Background(), domain.RepoGetImageOpts{
-				TenantOpts:  tc.tenantOpts,
-				Name:        tc.imgName,
-				IsParent:    tc.isParent,
-				Type:        tc.imgType,
-				Width:       tc.imgWidth,
-				AspectRatio: tc.imgAspectRatio,
-			})
+			image, err := repo.GetImage(context.Background(), tc.opts)
 			if err != nil {
 				return
 			}
 			assert.NoError(t, err)
-			//expectedImage, _ := os.ReadFile(tc.expectedImageDir + "/" + tc.imgName + "." + tc.imgType.String())
-			imageRef, err := vips.NewImageFromFile(tc.expectedImageDir + "/" + tc.imgName + "." + tc.imgType.String())
+			imageRef, err := vips.NewImageFromFile(tc.expectedImageDir + "/" + tc.opts.Name + "." + tc.opts.Type.String())
 			if err != nil {
 				panic(err)
 			}
-			expectedImage, _, err := exportImage(imageRef, tc.imgType)
+			expectedImage, _, err := exportImage(imageRef, *tc.opts.Type)
 			if err != nil {
 				panic(err)
 			}
@@ -245,50 +235,41 @@ func TestGetImage(t *testing.T) {
 			panic(err)
 		}
 		testCases := []struct {
-			imgName        string
-			imgType        domain.ImageType
-			imgWidth       int
-			imgAspectRatio domain.AR
-			isParent       bool
-			tenantOpts     domain.TenantOpts
-			expectedError  error
+			opts          domain.RepoGetImageOpts
+			expectedError error
 		}{
 			{
-				tenantOpts:     domain.TenantOpts{TenantCode: "tsttnt1", OrgCode: "tstorg1"},
-				imgName:        "tstimg1",
-				isParent:       false,
-				imgType:        domain.ImageType_JPEG,
-				imgWidth:       200, // actual image width 100
-				imgAspectRatio: domain.AR{Width: 3, Height: 4},
-				expectedError:  ErrImageNotFound,
-			},
-			{
-				tenantOpts:    domain.TenantOpts{TenantCode: "tsttnt2", OrgCode: "tstorg2"},
-				imgName:       "tstimg", // actual image's type is tstimg
-				isParent:      true,
+				opts: domain.NewRepoGetImageOpts().
+					SetTenantOpts(domain.TenantOpts{TenantCode: "tsttnt1", OrgCode: "tstorg1"}).
+					SetIsParent(false).
+					SetName("tstimg1").
+					SetFormat(domain.ImageType_JPEG).
+					SetWidth(200). // actual is 100
+					SetAr(domain.NewAspectRatioFrom(3, 4)),
 				expectedError: ErrImageNotFound,
 			},
 			{
-				tenantOpts:     domain.TenantOpts{TenantCode: "tsttnt3", OrgCode: "tstorg3"}, // actual image's = tsttnt2
-				imgName:        "tstimg2",
-				isParent:       false,
-				imgType:        domain.ImageType_AVIF,
-				imgWidth:       500,
-				imgAspectRatio: domain.AR{Width: 1, Height: 1},
-				expectedError:  ErrImageNotFound,
+				opts: domain.NewRepoGetImageOpts().
+					SetTenantOpts(domain.TenantOpts{TenantCode: "tsttnt2", OrgCode: "tstorg2"}).
+					SetIsParent(true).
+					SetName("tstimg"), // actual image's type is tstimg
+				expectedError: ErrImageNotFound,
+			},
+			{
+				opts: domain.NewRepoGetImageOpts().
+					SetTenantOpts(domain.TenantOpts{TenantCode: "tsttnt3", OrgCode: "tstorg3"}). // no tenant with code = tsttnt3 exists
+					SetIsParent(false).
+					SetName("tstimg2").
+					SetFormat(domain.ImageType_AVIF).
+					SetWidth(500).
+					SetAr(domain.NewAspectRatioFrom(1, 1)),
+				expectedError: ErrImageNotFound,
 			},
 		}
 
 		repo := NewVipsImageRepo(testEnviron)
 		for _, tc := range testCases {
-			_, err = repo.GetImage(context.Background(), domain.RepoGetImageOpts{
-				TenantOpts:  tc.tenantOpts,
-				Name:        tc.imgName,
-				IsParent:    tc.isParent,
-				Type:        tc.imgType,
-				Width:       tc.imgWidth,
-				AspectRatio: tc.imgAspectRatio,
-			})
+			_, err = repo.GetImage(context.Background(), tc.opts)
 			assert.ErrorIs(t, err, tc.expectedError)
 		}
 	})
@@ -363,9 +344,9 @@ func TestBuildImageOf(t *testing.T) {
 			}
 			// call repo.BuildImageOf()
 			builtImage, err := repo.BuildImageOf(context.Background(), image, domain.BuildImageOpts{
-				ImageType:   tc.imgType,
-				Width:       tc.imgWidth,
-				AspectRatio: tc.imgAspectRatio,
+				ImageType:   &tc.imgType,
+				Width:       &tc.imgWidth,
+				AspectRatio: &tc.imgAspectRatio,
 			})
 			// assert NoError
 			assert.NoError(t, err)
@@ -385,53 +366,6 @@ func TestBuildImageOf(t *testing.T) {
 		}
 	})
 
-	t.Run("an image with the given width and aspect ratio has to be possible", func(t *testing.T) {
-		err := initTestEnvironment()
-		defer func() {
-			err := tearDownTestEnvironment()
-			if err != nil {
-
-			}
-		}()
-		if err != nil {
-			panic(err)
-		}
-
-		path := util.FullImageAddr(
-			util.ResolveStoragePath(
-				testEnviron,
-				testImages[3].tenantOpts,
-				testImages[3].name,
-				testImages[3].isParent,
-				util.ChildPathOpts{
-					ImgType:  testImages[3].imgType,
-					ImgWidth: testImages[3].width,
-					ImgAR:    testImages[3].ar,
-				}),
-			testImages[3].name,
-			testImages[3].imgType.String(),
-		)
-		image, err := os.ReadFile(path)
-		if err != nil {
-			panic(err)
-		}
-
-		testCases := []struct {
-			width int
-			ar    domain.AR
-		}{
-			{width: 200, ar: domain.AR{Width: 275, Height: 183}},
-			{width: 100, ar: domain.AR{Width: 3, Height: 4}},
-		}
-
-		repo := NewVipsImageRepo(testEnviron)
-
-		for _, tc := range testCases {
-			_, err = repo.BuildImageOf(context.Background(), image, domain.BuildImageOpts{Width: tc.width, AspectRatio: tc.ar})
-			assert.ErrorIs(t, err, ErrInvalidDimensions)
-		}
-	})
-
 	t.Run("an error should be returned if the given image is not valid", func(t *testing.T) {
 		testCases := []struct {
 			invalidImage []byte
@@ -440,13 +374,16 @@ func TestBuildImageOf(t *testing.T) {
 			{invalidImage: []byte("invalid image byte")},
 		}
 
+		targetFormat := domain.ImageType_AVIF
+		targetWidth := 100
+
 		repo := NewVipsImageRepo(testEnviron)
 
 		for _, tc := range testCases {
 			_, err := repo.BuildImageOf(context.Background(), tc.invalidImage, domain.BuildImageOpts{
-				ImageType:   domain.ImageType_AVIF,
-				Width:       100,
-				AspectRatio: domain.AR{Width: 3, Height: 4},
+				ImageType:   &targetFormat,
+				Width:       &targetWidth,
+				AspectRatio: &domain.AR{Width: 3, Height: 4},
 			})
 			assert.ErrorIs(t, err, ErrUnSupportedImageFormat)
 		}
