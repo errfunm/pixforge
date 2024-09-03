@@ -5,12 +5,18 @@ import (
 	"example.com/imageProc/infra/persist"
 	"example.com/imageProc/interface/shttp"
 	"github.com/davidbyttow/govips/v2/vips"
+	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"os"
 )
 
 func main() {
-	baseDir := "/home/errfunm/Projects/Go/imageProc/static-files"
+	err := godotenv.Load()
+	if err != nil {
+		panic(err)
+	}
+	baseDir := os.Getenv("StorageDir")
 	repo := persist.NewVipsImageRepo(baseDir)
 	imgSvc := domainsvc.NewImageService(repo)
 	httpSvc := shttp.NewHttpService(imgSvc)

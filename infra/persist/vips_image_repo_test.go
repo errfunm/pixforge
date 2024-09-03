@@ -12,22 +12,20 @@ import (
 )
 
 var (
-	baseDir     = "/home/errfunm/Projects/Go/imageProc"
-	testEnviron = baseDir + "/test"
+	testDataDir, testEnviron string
 )
 
 var testImages = []struct {
 	tenantOpts domain.TenantOpts
-	baseDir    string
 	name       string
 	isParent   bool
 	imgType    domain.ImageType
 	width      int
 	ar         domain.AR
+	livingDir  string
 }{
 	{
 		tenantOpts: domain.TenantOpts{TenantCode: "tsttnt1", OrgCode: "tstorg1"},
-		baseDir:    baseDir,
 		name:       "tstimg1",
 		isParent:   false,
 		imgType:    domain.ImageType_JPEG,
@@ -36,14 +34,12 @@ var testImages = []struct {
 	},
 	{
 		tenantOpts: domain.TenantOpts{TenantCode: "tsttnt2", OrgCode: "tstorg2"},
-		baseDir:    baseDir,
 		name:       "tstimg2",
 		isParent:   true,
 		imgType:    domain.ImageType_AVIF,
 	},
 	{
 		tenantOpts: domain.TenantOpts{TenantCode: "tsttnt2", OrgCode: "tstorg2"},
-		baseDir:    baseDir,
 		name:       "tstimg2",
 		isParent:   false,
 		imgType:    domain.ImageType_AVIF,
@@ -52,7 +48,6 @@ var testImages = []struct {
 	},
 	{
 		tenantOpts: domain.TenantOpts{TenantCode: "tsttnt2", OrgCode: "tstorg2"},
-		baseDir:    baseDir,
 		name:       "tstimg3",
 		isParent:   true,
 		imgType:    domain.ImageType_WEBP,
@@ -60,8 +55,15 @@ var testImages = []struct {
 }
 
 func initTestEnvironment() error {
+	wd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	testDataDir = wd + "/testdata"
+	testEnviron = wd + "/test"
+
 	for _, ti := range testImages {
-		toBeLoadedImage, err := os.ReadFile(util.FullImageAddr(baseDir+"/testdata", ti.name, ti.imgType.String()))
+		toBeLoadedImage, err := os.ReadFile(util.FullImageAddr(testDataDir, ti.name, ti.imgType.String()))
 		if err != nil {
 			return err
 		}
@@ -71,10 +73,13 @@ func initTestEnvironment() error {
 			ImgAR:    ti.ar,
 			ImgWidth: ti.width,
 		})
-		if err = os.MkdirAll(storageDir, 0750); err != nil {
+		if err := os.MkdirAll(storageDir, 0750); err != nil {
 			return err
 		}
-
+		_, err = os.Stat(storageDir)
+		if err != nil {
+			return err
+		}
 		addrToBeWritten := util.FullImageAddr(storageDir, ti.name, ti.imgType.String())
 		if err = os.WriteFile(addrToBeWritten, toBeLoadedImage, 0666); err != nil {
 			return err
@@ -84,21 +89,21 @@ func initTestEnvironment() error {
 }
 
 func tearDownTestEnvironment() error {
-	return os.RemoveAll(baseDir + "/test")
+	return os.RemoveAll(testEnviron)
 }
 
 func TestCreateImage(t *testing.T) {
 	t.Run("an image can be created with no error", func(t *testing.T) {
 		err := initTestEnvironment()
+		if err != nil {
+			t.Fatalf("Failed to initialize test environment: %v", err)
+		}
 		defer func() {
 			err = tearDownTestEnvironment()
 			if err != nil {
-
+				t.Fatalf("Failed to tear down test environment: %v", err)
 			}
 		}()
-		if err != nil {
-			panic(err)
-		}
 
 		repo := NewVipsImageRepo(testEnviron)
 
@@ -115,16 +120,10 @@ func TestCreateImage(t *testing.T) {
 				isParent:   false,
 				imgType:    domain.ImageType_JPEG,
 			},
-			//{
-			//	tenantOpts: domain.TenantOpts{TenantCode: "tsttnt4", OrgCode: "tstorg4"},
-			//	imgName:    "tstimg2",
-			//	isParent:   true,
-			//	imgType:    domain.ImageType_AVIF,
-			//},
 		}
 
 		for _, tc := range testCases {
-			imageRef, err := vips.NewImageFromFile(baseDir + "/testdata" + "/" + tc.imgName + "." + tc.imgType.String())
+			imageRef, err := vips.NewImageFromFile(testDataDir + "/" + tc.imgName + "." + tc.imgType.String())
 			if err != nil {
 				panic(err)
 			}
@@ -333,7 +332,6 @@ func TestBuildImageOf(t *testing.T) {
 				),
 			},
 		}
-
 		repo := NewVipsImageRepo(testEnviron)
 
 		for _, tc := range testCases {
