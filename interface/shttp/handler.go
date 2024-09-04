@@ -3,8 +3,8 @@ package shttp
 import (
 	"context"
 	"errors"
-	"example.com/imageProc/domain"
-	domainsvc "example.com/imageProc/domain/service"
+	"example.com/imageProc/internal/domain"
+	"example.com/imageProc/internal/domain/service"
 	"github.com/labstack/echo/v4"
 	"net/http"
 	"slices"

@@ -2,7 +2,7 @@ package util
 
 import (
 	"errors"
-	"example.com/imageProc/domain"
+	"example.com/imageProc/internal/domain"
 	"fmt"
 	"os"
 	"strings"
@@ -30,7 +30,6 @@ func ResolveStoragePath(baseUrl string, tenantOpts domain.TenantOpts, name strin
 	return fmt.Sprintf("%s/%s/%s/%d", parentDir, childImageOpts.ImgType.String(), childImageOpts.ImgAR.String(), childImageOpts.ImgWidth)
 }
 
-// parentImageDir || imageParentDir
 func parentImageDir(baseUrl string, tenantOpts domain.TenantOpts, name string) string {
 	return fmt.Sprintf("%s/%s-%s/%s", baseUrl, tenantOpts.TenantCode, tenantOpts.OrgCode, name)
 }

@@ -1,9 +1,9 @@
 package main
 
 import (
-	domainsvc "example.com/imageProc/domain/service"
-	"example.com/imageProc/infra/persist"
 	"example.com/imageProc/interface/shttp"
+	"example.com/imageProc/internal/domain/service"
+	"example.com/imageProc/internal/infra/persist"
 	"github.com/davidbyttow/govips/v2/vips"
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"

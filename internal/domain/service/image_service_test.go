@@ -2,8 +2,8 @@ package domainsvc
 
 import (
 	"context"
-	"example.com/imageProc/domain"
-	"example.com/imageProc/infra/persist"
+	domain2 "example.com/imageProc/internal/domain"
+	persist2 "example.com/imageProc/internal/infra/persist"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -13,9 +13,9 @@ func TestUpload(t *testing.T) {
 		ctx := context.Background()
 		img := []byte("valid image")
 		imgName := "test_image_name"
-		opts := domain.TenantOpts{}
+		opts := domain2.TenantOpts{}
 
-		mockRepo := new(persist.MockImageRepo)
+		mockRepo := new(persist2.MockImageRepo)
 		mockRepo.On("CreateImage", ctx, img, true, "", opts).Return(imgName, nil)
 
 		svc := NewImageService(mockRepo)
@@ -33,14 +33,14 @@ func TestGetImage(t *testing.T) {
 		ctx := context.Background()
 		img := []byte("a test image")
 		imgName := "test_image_name"
-		tenantOpts := domain.TenantOpts{}
+		tenantOpts := domain2.TenantOpts{}
 
-		repoGetImageOpts := domain.RepoGetImageOpts{
+		repoGetImageOpts := domain2.RepoGetImageOpts{
 			TenantOpts: tenantOpts,
 			Name:       imgName,
 		}
 
-		mockRepo := new(persist.MockImageRepo)
+		mockRepo := new(persist2.MockImageRepo)
 		mockRepo.On("GetImage", ctx, repoGetImageOpts).Return(img, nil)
 
 		svc := NewImageService(mockRepo)
@@ -55,13 +55,13 @@ func TestGetImage(t *testing.T) {
 	t.Run("an error should be returned if no primary version of the requested image exist", func(t *testing.T) {
 		ctx := context.Background()
 		imgName := "test_image_name"
-		tenantOpts := domain.TenantOpts{}
+		tenantOpts := domain2.TenantOpts{}
 
-		mockRepo := new(persist.MockImageRepo)
-		mockRepo.On("GetImage", ctx, domain.RepoGetImageOpts{TenantOpts: tenantOpts, Name: imgName}).
-			Return([]byte{}, persist.ErrImageNotFound)
-		mockRepo.On("GetImage", ctx, domain.RepoGetImageOpts{TenantOpts: tenantOpts, Name: imgName, IsParent: true}).
-			Return([]byte{}, persist.ErrImageNotFound)
+		mockRepo := new(persist2.MockImageRepo)
+		mockRepo.On("GetImage", ctx, domain2.RepoGetImageOpts{TenantOpts: tenantOpts, Name: imgName}).
+			Return([]byte{}, persist2.ErrImageNotFound)
+		mockRepo.On("GetImage", ctx, domain2.RepoGetImageOpts{TenantOpts: tenantOpts, Name: imgName, IsParent: true}).
+			Return([]byte{}, persist2.ErrImageNotFound)
 
 		svc := NewImageService(mockRepo)
 
@@ -74,16 +74,16 @@ func TestGetImage(t *testing.T) {
 	t.Run("an image can be built from its primary version if it does not exist", func(t *testing.T) {
 		ctx := context.Background()
 		imgName := "test_image_name"
-		tenantOpts := domain.TenantOpts{}
+		tenantOpts := domain2.TenantOpts{}
 		primaryImg := []byte("this is the primary version of the image requested")
 		builtImg := []byte("this is a brand new image built from primary version")
 
-		mockRepo := new(persist.MockImageRepo)
-		mockRepo.On("GetImage", ctx, domain.RepoGetImageOpts{TenantOpts: tenantOpts, Name: imgName}).
-			Return([]byte{}, persist.ErrImageNotFound)
-		mockRepo.On("GetImage", ctx, domain.RepoGetImageOpts{TenantOpts: tenantOpts, Name: imgName, IsParent: true}).
+		mockRepo := new(persist2.MockImageRepo)
+		mockRepo.On("GetImage", ctx, domain2.RepoGetImageOpts{TenantOpts: tenantOpts, Name: imgName}).
+			Return([]byte{}, persist2.ErrImageNotFound)
+		mockRepo.On("GetImage", ctx, domain2.RepoGetImageOpts{TenantOpts: tenantOpts, Name: imgName, IsParent: true}).
 			Return(primaryImg, nil)
-		mockRepo.On("BuildImageOf", ctx, primaryImg, domain.BuildImageOpts{}).
+		mockRepo.On("BuildImageOf", ctx, primaryImg, domain2.BuildImageOpts{}).
 			Return(builtImg, nil)
 		mockRepo.On("CreateImage", ctx, builtImg, false, imgName, tenantOpts).
 			Return(imgName, nil)

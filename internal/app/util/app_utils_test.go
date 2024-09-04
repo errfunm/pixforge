@@ -1,7 +1,7 @@
 package util
 
 import (
-	"example.com/imageProc/domain"
+	"example.com/imageProc/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"strconv"
 	"testing"

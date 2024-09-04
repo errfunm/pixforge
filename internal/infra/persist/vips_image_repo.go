@@ -3,8 +3,8 @@ package persist
 import (
 	"context"
 	"errors"
-	"example.com/imageProc/app/util"
-	"example.com/imageProc/domain"
+	"example.com/imageProc/internal/app/util"
+	domain2 "example.com/imageProc/internal/domain"
 	"fmt"
 	"github.com/davidbyttow/govips/v2/vips"
 	"math"
@@ -16,10 +16,10 @@ type vipsImageRepo struct {
 	baseDir string
 }
 
-func (i vipsImageRepo) GetImage(ctx context.Context, opts domain.RepoGetImageOpts) ([]byte, error) {
+func (i vipsImageRepo) GetImage(ctx context.Context, opts domain2.RepoGetImageOpts) ([]byte, error) {
 	var (
 		width, height int
-		format        domain.ImageType
+		format        domain2.ImageType
 	)
 
 	path := util.ResolveStoragePath(
@@ -44,7 +44,7 @@ func (i vipsImageRepo) GetImage(ctx context.Context, opts domain.RepoGetImageOpt
 	}
 
 	if opts.IsParent {
-		imgType, err := domain.ImageTypeFromString(parentImageRef.Format().FileExt())
+		imgType, err := domain2.ImageTypeFromString(parentImageRef.Format().FileExt())
 		if err != nil {
 			return nil, err
 		}
@@ -59,7 +59,7 @@ func (i vipsImageRepo) GetImage(ctx context.Context, opts domain.RepoGetImageOpt
 	width, height = determineDimensions(opts.Width, opts.Height, opts.AspectRatio, parentImageRef.Width(), parentImageRef.Height())
 
 	if opts.Type == nil {
-		format, err = domain.ImageTypeFromString(parentImageRef.Format().FileExt())
+		format, err = domain2.ImageTypeFromString(parentImageRef.Format().FileExt())
 		if err != nil {
 			return nil, ErrInternal
 		}
@@ -69,7 +69,7 @@ func (i vipsImageRepo) GetImage(ctx context.Context, opts domain.RepoGetImageOpt
 
 	fullPath = util.FullImageAddr(util.ResolveStoragePath(i.baseDir, opts.TenantOpts, opts.Name, false, util.ChildPathOpts{
 		ImgType:  format,
-		ImgAR:    domain.NewAspectRatioFrom(width, height),
+		ImgAR:    domain2.NewAspectRatioFrom(width, height),
 		ImgWidth: width,
 	}), opts.Name, format.String())
 
@@ -85,7 +85,7 @@ func (i vipsImageRepo) GetImage(ctx context.Context, opts domain.RepoGetImageOpt
 	return byteImg, nil
 }
 
-func (i vipsImageRepo) BuildImageOf(ctx context.Context, image []byte, opts domain.BuildImageOpts) ([]byte, error) {
+func (i vipsImageRepo) BuildImageOf(ctx context.Context, image []byte, opts domain2.BuildImageOpts) ([]byte, error) {
 	imgRef, err := vips.NewImageFromBuffer(image)
 	if err != nil {
 		if errors.Is(err, vips.ErrUnsupportedImageFormat) {
@@ -110,9 +110,9 @@ func (i vipsImageRepo) BuildImageOf(ctx context.Context, image []byte, opts doma
 		return nil, err
 	}
 
-	var newImageFormat domain.ImageType
+	var newImageFormat domain2.ImageType
 	if opts.ImageType == nil {
-		newImageFormat, err = domain.ImageTypeFromString(imgRef.Format().FileExt())
+		newImageFormat, err = domain2.ImageTypeFromString(imgRef.Format().FileExt())
 		if err != nil {
 			return nil, ErrInternal
 		}
@@ -127,14 +127,14 @@ func (i vipsImageRepo) BuildImageOf(ctx context.Context, image []byte, opts doma
 	return newImage, nil
 }
 
-func (i vipsImageRepo) CreateImage(ctx context.Context, image []byte, isParent bool, name string, opts domain.TenantOpts) (string, error) {
+func (i vipsImageRepo) CreateImage(ctx context.Context, image []byte, isParent bool, name string, opts domain2.TenantOpts) (string, error) {
 	var imgName, path string
 	imgRef, err := vips.NewImageFromBuffer(image)
 	if err != nil {
 		return "", err
 	}
 
-	imgType, err := domain.ImageTypeFromString(imgRef.Format().FileExt())
+	imgType, err := domain2.ImageTypeFromString(imgRef.Format().FileExt())
 	if err != nil {
 		return "", err
 	}
@@ -144,7 +144,7 @@ func (i vipsImageRepo) CreateImage(ctx context.Context, image []byte, isParent b
 		path = util.ResolveStoragePath(i.baseDir, opts, imgName, true, util.ChildPathOpts{})
 	} else {
 		imgName = name
-		ar := domain.NewAspectRatioFrom(imgRef.Width(), imgRef.Height())
+		ar := domain2.NewAspectRatioFrom(imgRef.Width(), imgRef.Height())
 		path = util.ResolveStoragePath(i.baseDir, opts, imgName, false, util.ChildPathOpts{
 			ImgType:  imgType,
 			ImgAR:    ar,
@@ -162,13 +162,13 @@ func (i vipsImageRepo) CreateImage(ctx context.Context, image []byte, isParent b
 	return imgName, nil
 }
 
-func NewVipsImageRepo(baseDir string) domain.ImageRepoInterface {
+func NewVipsImageRepo(baseDir string) domain2.ImageRepoInterface {
 	return vipsImageRepo{
 		baseDir: baseDir,
 	}
 }
 
-func exportImage(imageRef *vips.ImageRef, imgType domain.ImageType) ([]byte, *vips.ImageMetadata, error) {
+func exportImage(imageRef *vips.ImageRef, imgType domain2.ImageType) ([]byte, *vips.ImageMetadata, error) {
 	var (
 		image         []byte
 		imageMetaData *vips.ImageMetadata
@@ -176,13 +176,13 @@ func exportImage(imageRef *vips.ImageRef, imgType domain.ImageType) ([]byte, *vi
 	)
 
 	switch imgType {
-	case domain.ImageType_JPEG:
+	case domain2.ImageType_JPEG:
 		image, imageMetaData, err = imageRef.ExportJpeg(vips.NewJpegExportParams())
-	case domain.ImageType_WEBP:
+	case domain2.ImageType_WEBP:
 		image, imageMetaData, err = imageRef.ExportWebp(vips.NewWebpExportParams())
-	case domain.ImageType_AVIF:
+	case domain2.ImageType_AVIF:
 		image, imageMetaData, err = imageRef.ExportAvif(vips.NewAvifExportParams())
-	case domain.ImageType_PNG:
+	case domain2.ImageType_PNG:
 		image, imageMetaData, err = imageRef.ExportPng(vips.NewPngExportParams())
 	}
 
@@ -230,11 +230,11 @@ func cropCenter(image *vips.ImageRef, targetWidth, targetHeight int) (*vips.Imag
 	return image, nil
 }
 
-func determineDimensions(targetWidth, targetHeight *int, targetAr *domain.AR, originalDimensions ...int) (int, int) {
+func determineDimensions(targetWidth, targetHeight *int, targetAr *domain2.AR, originalDimensions ...int) (int, int) {
 	originalWidth := originalDimensions[0]
 	originalHeight := originalDimensions[1]
 
-	originalAr := domain.NewAspectRatioFrom(originalWidth, originalHeight)
+	originalAr := domain2.NewAspectRatioFrom(originalWidth, originalHeight)
 	var newWidth, newHeight int
 	switch {
 	case targetWidth != nil && targetHeight != nil && targetAr != nil:

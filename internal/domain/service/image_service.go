@@ -3,8 +3,8 @@ package domainsvc
 import (
 	"context"
 	"errors"
-	"example.com/imageProc/domain"
-	"example.com/imageProc/infra/persist"
+	"example.com/imageProc/internal/domain"
+	"example.com/imageProc/internal/infra/persist"
 )
 
 type GetImageOpts struct {
