@@ -94,7 +94,7 @@ func ImageTypeFromString(imgTypeStr string) (ImageType, error) {
 	case ".png":
 		return ImageType_PNG, nil
 	default:
-		return -1, fmt.Errorf("unknown image type: %v", imgTypeStr)
+		return -1, fmt.Errorf("unsupported image format: %v", imgTypeStr)
 	}
 }
 
