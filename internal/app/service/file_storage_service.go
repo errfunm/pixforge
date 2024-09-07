@@ -103,6 +103,9 @@ func (l localImageStorageService) GetChildImage(name string, format domain.Image
 
 	image, err := os.ReadFile(fDir)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, ErrNoMatchingFile
+		}
 		return nil, fmt.Errorf("internal error: %v", err)
 	}
 	return image, nil
