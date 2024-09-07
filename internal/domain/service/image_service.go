@@ -5,8 +5,7 @@ import (
 	"errors"
 	appsvc "example.com/imageProc/internal/app/service"
 	"example.com/imageProc/internal/domain"
-	"example.com/imageProc/internal/infra/persist"
-	"github.com/davidbyttow/govips/v2/vips"
+	"fmt"
 	"math"
 )
 
@@ -25,16 +24,25 @@ type ImageServiceInterface interface {
 }
 
 type ImageService struct {
-	repo           domain.ImageRepoInterface
-	storageService appsvc.ImageStorageServiceInterface
+	processorService appsvc.ImageProcessingServiceInterface
+	storageService   appsvc.ImageStorageServiceInterface
 }
 
 var (
-	ErrNotFound = errors.New("no primary image found")
+	ErrNotFound               = errors.New("no primary image found")
+	ErrUnsupportedImageFormat = errors.New("unsupported image format")
 )
 
 func (i ImageService) Upload(ctx context.Context, imageByte []byte, tenantOpts domain.TenantOpts) (string, error) {
-	imgId, err := i.storageService.StoreParentImage(imageByte, tenantOpts)
+	format, err := i.processorService.GetFormat(imageByte)
+	if err != nil {
+		if errors.Is(err, appsvc.ErrUnsupportedImageFormat) {
+			return "", ErrUnsupportedImageFormat
+		}
+		return "", fmt.Errorf("internal error: %v", err)
+	}
+
+	imgId, err := i.storageService.StoreParentImage(imageByte, format, tenantOpts)
 	if err != nil {
 		return "", err
 	}
@@ -43,8 +51,9 @@ func (i ImageService) Upload(ctx context.Context, imageByte []byte, tenantOpts d
 
 func (i ImageService) GetImage(ctx context.Context, opts GetImageOpts) ([]byte, error) {
 	var parentImage []byte
-	var parentImageWidth, parentImageHeight, newWidth, newHeight int
-	var parentImageFormat, newImageFormat domain.ImageType
+	var parentImageSpec domain.ImageSpec
+	var targetWidth, targetHeight int
+	var targetImageFormat domain.ImageType
 	// check whether parentImage needs to be fetched at first or not
 	parentHasToBeFetched := false
 	if opts.Type == nil {
@@ -70,26 +79,20 @@ func (i ImageService) GetImage(ctx context.Context, opts GetImageOpts) ([]byte, 
 			}
 			return nil, errors.New("internal error")
 		}
-		imgRef, err := vips.NewImageFromBuffer(parentImage)
-		if err != nil {
-			return nil, err
-		}
-		parentImageWidth = imgRef.Width()
-		parentImageHeight = imgRef.Height()
-		parentImageFormat, err = domain.ImageTypeFromString(imgRef.Format().FileExt())
+		parentImageSpec, err = i.processorService.GetSpec(parentImage)
 		if err != nil {
 			return nil, errors.New("internal error")
 		}
 	}
 	// determineDimensions
-	newWidth, newHeight = determineDimensions(opts.Width, opts.Height, opts.Ar, parentImageWidth, parentImageHeight)
+	targetWidth, targetHeight = determineDimensions(opts.Width, opts.Height, opts.Ar, parentImageSpec.Width, parentImageSpec.Height)
 	// determineImageFormat
 	if opts.Type == nil {
-		newImageFormat = parentImageFormat
+		targetImageFormat = parentImageSpec.Format
 	}
-	newImageFormat = *opts.Type
+	targetImageFormat = *opts.Type
 	// fetch childImage
-	childImage, err := i.storageService.GetChildImage(opts.Name, newImageFormat, newWidth, newHeight, opts.TenantOpts)
+	childImage, err := i.storageService.GetChildImage(opts.Name, targetImageFormat, targetWidth, targetHeight, opts.TenantOpts)
 	if err == nil {
 		return childImage, nil
 	}
@@ -107,30 +110,57 @@ func (i ImageService) GetImage(ctx context.Context, opts GetImageOpts) ([]byte, 
 		}
 	}
 	// buildImage then return
-	builtImage, err := i.repo.BuildImageOf(ctx, parentImage, domain.BuildImageOpts{
-		Width:       opts.Width,
-		Height:      opts.Height,
-		AspectRatio: opts.Ar,
-		ImageType:   opts.Type,
-	})
+	scale := calculateScale(parentImageSpec.Width, parentImageSpec.Height, &targetWidth, &targetHeight)
+	resizedImage, err := i.processorService.Resize(parentImage, scale)
 	if err != nil {
-		if errors.Is(err, persist.ErrUnSupportedImageFormat) {
-			// TODO: internal error should be returned
-		}
+		return nil, err
+	}
+	resizedImageSpec, err := i.processorService.GetSpec(resizedImage)
+	if err != nil {
+		return nil, err
+	}
+	var centeredImage []byte
+	switch {
+	case resizedImageSpec.Width == targetWidth && resizedImageSpec.Height == targetHeight:
+	case resizedImageSpec.Width == targetWidth:
+		remainder := resizedImageSpec.Height - targetHeight
+		// TODO: check if remainder < 0
+		centeredImage, err = i.processorService.Crop(resizedImage, 0, remainder/2, resizedImageSpec.Width, targetHeight)
+	case resizedImageSpec.Height == targetHeight:
+		remainder := resizedImageSpec.Width - targetWidth
+		// TODO: check if remainder < 0
+		centeredImage, err = i.processorService.Crop(resizedImage, remainder/2, 0, targetWidth, resizedImageSpec.Height)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	targetImage, err := i.processorService.Export(centeredImage, targetImageFormat)
+	if err != nil {
 		return nil, err
 	}
 	// cache image before return
-	err = i.storageService.StoreChildImage(builtImage, opts.Name, opts.TenantOpts)
+	err = i.storageService.StoreChildImage(targetImage,
+		opts.Name,
+		domain.ImageSpec{
+			Width:  targetWidth,
+			Height: targetHeight,
+			Format: targetImageFormat,
+		},
+		opts.TenantOpts,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return builtImage, nil
+	return targetImage, nil
 }
 
-func NewImageService(repo domain.ImageRepoInterface) ImageServiceInterface {
+func NewImageService(storageSvc appsvc.ImageStorageServiceInterface,
+	processorSvc appsvc.ImageProcessingServiceInterface) ImageServiceInterface {
 	return ImageService{
-		repo: repo,
+		storageService:   storageSvc,
+		processorService: processorSvc,
 	}
 }
 
@@ -211,4 +241,19 @@ func determineDimensions(targetWidth, targetHeight *int, targetAr *domain.AR, or
 		newHeight = originalHeight
 	}
 	return newWidth, newHeight
+}
+
+func calculateScale(originalWidth, originalHeight int, targetWidth, targetHeight *int) float64 {
+	switch {
+	case targetWidth != nil && targetHeight != nil:
+		scaleWidth := float64(*targetWidth) / float64(originalWidth)
+		scaleHeight := float64(*targetHeight) / float64(originalHeight)
+		return math.Max(scaleWidth, scaleHeight)
+	case targetWidth != nil:
+		return float64(*targetWidth) / float64(originalWidth)
+	case targetHeight != nil:
+		return float64(*targetHeight) / float64(originalHeight)
+	default:
+		return 1.0
+	}
 }

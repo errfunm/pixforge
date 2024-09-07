@@ -4,7 +4,6 @@ import (
 	"errors"
 	"example.com/imageProc/internal/domain"
 	"fmt"
-	"github.com/davidbyttow/govips/v2/vips"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,14 +11,13 @@ import (
 )
 
 var (
-	ErrNoMatchingFile   = errors.New("no file found with in the directory with the given pattern")
-	ErrPathDoesNotExist = errors.New("path does not exist")
-	ErrInternal         = errors.New("internal error")
+	ErrNoMatchingFile = errors.New("no file found with in the directory with the given pattern")
+	ErrInternal       = errors.New("internal error")
 )
 
 type ImageStorageServiceInterface interface {
-	StoreParentImage(image []byte, tenantOpts domain.TenantOpts) (string, error)
-	StoreChildImage(image []byte, name string, tenantOpts domain.TenantOpts) error
+	StoreParentImage(image []byte, format domain.ImageType, tenantOpts domain.TenantOpts) (string, error)
+	StoreChildImage(image []byte, name string, spec domain.ImageSpec, tenantOpts domain.TenantOpts) error
 	GetParentImage(name string, tenantOpts domain.TenantOpts) ([]byte, error)
 	GetChildImage(name string, format domain.ImageType, width, height int, tenantOpts domain.TenantOpts) ([]byte, error)
 }
@@ -28,62 +26,34 @@ type localImageStorageService struct {
 	baseDir string
 }
 
-func (l localImageStorageService) StoreParentImage(image []byte, tenantOpts domain.TenantOpts) (string, error) {
+func (l localImageStorageService) StoreParentImage(image []byte, format domain.ImageType, tenantOpts domain.TenantOpts) (string, error) {
 	fName := GenerateImageName()
-
-	imgRef, err := vips.NewImageFromBuffer(image)
-	if err != nil {
-		if errors.Is(err, vips.ErrUnsupportedImageFormat) {
-			return "", fmt.Errorf("unsupportedImageFormat: %v", imgRef.Format().FileExt())
-		}
-		return "", err
-	}
-
-	imgFormat, err := domain.ImageTypeFromString(imgRef.Format().FileExt())
-	if err != nil {
-		return "", err
-	}
 
 	path := parentImageDir(l.baseDir, tenantOpts, fName)
 
-	if err = os.MkdirAll(path, 0750); err != nil {
+	if err := os.MkdirAll(path, 0750); err != nil {
 		return "", fmt.Errorf("error while making directory %s", err.Error())
 	}
 
-	fDir := filepath.Join(path, fName+"."+imgFormat.String())
-	if err = os.WriteFile(fDir, image, 0666); err != nil {
+	fDir := filepath.Join(path, fName+"."+format.String())
+	if err := os.WriteFile(fDir, image, 0666); err != nil {
 		return "", fmt.Errorf("error while writing file %s", err.Error())
 	}
 	return fName, nil
 }
 
-func (l localImageStorageService) StoreChildImage(image []byte, name string, tenantOpts domain.TenantOpts) error {
-	imgRef, err := vips.NewImageFromBuffer(image)
-	if err != nil {
-		if errors.Is(err, vips.ErrUnsupportedImageFormat) {
-			return fmt.Errorf("unsupportedImageFormat: %v", imgRef.Format().FileExt())
-		}
-		return err
-	}
-
-	imgWidth := imgRef.Width()
-	imgHeight := imgRef.Height()
-	imgFormat, err := domain.ImageTypeFromString(imgRef.Format().FileExt())
-	if err != nil {
-		return err
-	}
-
+func (l localImageStorageService) StoreChildImage(image []byte, name string, spec domain.ImageSpec, tenantOpts domain.TenantOpts) error {
 	path := childImageDir(
 		parentImageDir(l.baseDir, tenantOpts, name),
-		imgFormat, imgWidth, imgHeight)
+		spec.Format, spec.Width, spec.Height)
 
-	if err = os.MkdirAll(path, 0750); err != nil {
+	if err := os.MkdirAll(path, 0750); err != nil {
 		return fmt.Errorf("error while making directory %s", err.Error())
 	}
 
-	fDir := filepath.Join(path, name+"."+imgFormat.String())
+	fDir := filepath.Join(path, name+"."+spec.Format.String())
 
-	if err = os.WriteFile(fDir, image, 0666); err != nil {
+	if err := os.WriteFile(fDir, image, 0666); err != nil {
 		return fmt.Errorf("error while writing file %s", err.Error())
 	}
 	return nil

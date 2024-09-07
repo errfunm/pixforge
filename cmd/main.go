@@ -2,8 +2,8 @@ package main
 
 import (
 	"example.com/imageProc/interface/shttp"
+	appsvc "example.com/imageProc/internal/app/service"
 	"example.com/imageProc/internal/domain/service"
-	"example.com/imageProc/internal/infra/persist"
 	"github.com/davidbyttow/govips/v2/vips"
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
@@ -17,8 +17,10 @@ func main() {
 		panic(err)
 	}
 	baseDir := os.Getenv("StorageDir")
-	repo := persist.NewVipsImageRepo(baseDir)
-	imgSvc := domainsvc.NewImageService(repo)
+	localImageStorageSvc := appsvc.NewLocalImageStorageService(baseDir)
+	vipsImageProcessorSvc := appsvc.NewVipsImageProcessorService()
+	imgSvc := domainsvc.NewImageService(localImageStorageSvc, vipsImageProcessorSvc)
+
 	httpSvc := shttp.NewHttpService(imgSvc)
 
 	vips.Startup(nil)

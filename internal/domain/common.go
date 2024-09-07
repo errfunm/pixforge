@@ -113,3 +113,9 @@ func GreatCommonFactor(a int, b int) int {
 	}
 	return a
 }
+
+type ImageSpec struct {
+	Width  int
+	Height int
+	Format ImageType
+}
