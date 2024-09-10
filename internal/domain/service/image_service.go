@@ -55,24 +55,9 @@ func (i ImageService) GetImage(ctx context.Context, opts GetImageOpts) ([]byte, 
 	var targetWidth, targetHeight int
 	var targetImageFormat domain.ImageType
 	// check whether parentImage needs to be fetched at first or not
-	parentHasToBeFetched := false
-	if opts.Type == nil {
-		parentHasToBeFetched = true
-	} else {
-		if opts.Width == nil {
-			if opts.Height == nil || opts.Ar == nil {
-				parentHasToBeFetched = true
-			}
-		}
-		if opts.Height == nil {
-			if opts.Width == nil || opts.Ar == nil {
-				parentHasToBeFetched = true
-			}
-		}
-	}
-	// if true then fetch parentImage
-	if parentHasToBeFetched {
-		parentImage, err := i.storageService.GetParentImage(opts.Name, opts.TenantOpts)
+	if parentImageNeedsToBeFetched(opts) {
+		var err error
+		parentImage, err = i.storageService.GetParentImage(opts.Name, opts.TenantOpts)
 		if err != nil {
 			if errors.Is(err, appsvc.ErrNoMatchingFile) {
 				return nil, ErrNotFound
@@ -85,12 +70,13 @@ func (i ImageService) GetImage(ctx context.Context, opts GetImageOpts) ([]byte, 
 		}
 	}
 	// determineDimensions
-	targetWidth, targetHeight = determineDimensions(opts.Width, opts.Height, opts.Ar, parentImageSpec.Width, parentImageSpec.Height)
+	targetWidth, targetHeight = determineDimensions(opts, parentImageSpec.Width, parentImageSpec.Height)
 	// determineImageFormat
 	if opts.Type == nil {
 		targetImageFormat = parentImageSpec.Format
+	} else {
+		targetImageFormat = *opts.Type
 	}
-	targetImageFormat = *opts.Type
 	// fetch childImage
 	childImage, err := i.storageService.GetChildImage(opts.Name, targetImageFormat, targetWidth, targetHeight, opts.TenantOpts)
 	if err == nil {
@@ -122,6 +108,7 @@ func (i ImageService) GetImage(ctx context.Context, opts GetImageOpts) ([]byte, 
 	var centeredImage []byte
 	switch {
 	case resizedImageSpec.Width == targetWidth && resizedImageSpec.Height == targetHeight:
+		centeredImage = resizedImage
 	case resizedImageSpec.Width == targetWidth:
 		remainder := resizedImageSpec.Height - targetHeight
 		// TODO: check if remainder < 0
@@ -198,49 +185,48 @@ func NewServiceGetImageOpts() GetImageOpts {
 	return GetImageOpts{}
 }
 
-func determineDimensions(targetWidth, targetHeight *int, targetAr *domain.AR, originalDimensions ...int) (int, int) {
-	originalWidth := originalDimensions[0]
-	originalHeight := originalDimensions[1]
-
-	originalAr := domain.NewAspectRatioFrom(originalWidth, originalHeight)
-	var newWidth, newHeight int
-	switch {
-	case targetWidth != nil && targetHeight != nil && targetAr != nil:
-		if math.Abs(float64(*targetWidth)/float64(*targetHeight)-targetAr.Float64()) < 1e-6 {
-			newWidth = *targetWidth
-			newHeight = *targetHeight
-		} else {
-			newWidth = *targetWidth
-			newHeight = int(math.Round(float64(newWidth) / targetAr.Float64()))
-		}
-	case targetWidth != nil && targetHeight == nil && targetAr == nil:
-		newWidth = *targetWidth
-		newHeight = int(math.Round(float64(newWidth) / originalAr.Float64()))
-	case targetWidth == nil && targetHeight != nil && targetAr == nil:
-		newHeight = *targetHeight
-		newWidth = int(math.Round(float64(newHeight) * originalAr.Float64()))
-	case targetWidth == nil && targetHeight == nil && targetAr != nil:
-		if originalAr.Float64() > targetAr.Float64() {
-			newHeight = originalHeight
-			newWidth = int(math.Round(float64(newHeight) * targetAr.Float64()))
-		} else {
-			newWidth = originalWidth
-			newHeight = int(math.Round(float64(newWidth) / targetAr.Float64()))
-		}
-	case targetWidth != nil && targetHeight == nil && targetAr != nil:
-		newWidth = *targetWidth
-		newHeight = int(math.Round(float64(newWidth) / targetAr.Float64()))
-	case targetWidth == nil && targetHeight != nil && targetAr != nil:
-		newHeight = *targetHeight
-		newWidth = int(math.Round(float64(newHeight) * targetAr.Float64()))
-	case targetWidth != nil && targetHeight != nil && targetAr == nil:
-		newWidth = *targetWidth
-		newHeight = *targetHeight
-	case targetWidth == nil && targetHeight == nil && targetAr == nil:
-		newWidth = originalWidth
-		newHeight = originalHeight
+func determineDimensions(opts GetImageOpts, originalDimensions ...int) (int, int) {
+	var originalAr domain.AR
+	var originalWidth, originalHeight int
+	if originalDimensionsNeeded(opts) {
+		originalWidth = originalDimensions[0]
+		originalHeight = originalDimensions[1]
+		originalAr = domain.NewAspectRatioFrom(originalWidth, originalHeight)
 	}
-	return newWidth, newHeight
+
+	if opts.Ar != nil {
+		if opts.Width != nil && opts.Height != nil {
+			return *opts.Width, *opts.Height
+		}
+		if opts.Width != nil {
+			return *opts.Width, heightFromAspectRatio(*opts.Width, *opts.Ar)
+		}
+		if opts.Height != nil {
+			return widthFromAspectRatio(*opts.Height, *opts.Ar), *opts.Height
+		}
+		if originalAr.Float64() > opts.Ar.Float64() {
+			return widthFromAspectRatio(originalHeight, *opts.Ar), originalHeight
+		}
+		return originalWidth, heightFromAspectRatio(originalWidth, *opts.Ar)
+	}
+	if opts.Width != nil && opts.Height != nil {
+		return *opts.Width, *opts.Height
+	}
+	if opts.Width != nil {
+		return *opts.Width, heightFromAspectRatio(*opts.Width, originalAr)
+	}
+	if opts.Height != nil {
+		return widthFromAspectRatio(*opts.Height, originalAr), *opts.Height
+	}
+	return originalWidth, originalHeight
+}
+
+func heightFromAspectRatio(width int, ar domain.AR) int {
+	return int(math.Round(float64(width) / ar.Float64()))
+}
+
+func widthFromAspectRatio(height int, ar domain.AR) int {
+	return int(math.Round(float64(height) * ar.Float64()))
 }
 
 func calculateScale(originalWidth, originalHeight int, targetWidth, targetHeight *int) float64 {
@@ -256,4 +242,13 @@ func calculateScale(originalWidth, originalHeight int, targetWidth, targetHeight
 	default:
 		return 1.0
 	}
+}
+
+func parentImageNeedsToBeFetched(opts GetImageOpts) bool {
+	return opts.Type == nil || originalDimensionsNeeded(opts)
+}
+
+func originalDimensionsNeeded(opts GetImageOpts) bool {
+	return (opts.Ar == nil && (opts.Width == nil || opts.Height == nil)) ||
+		(opts.Ar != nil && (opts.Width == nil && opts.Height == nil))
 }

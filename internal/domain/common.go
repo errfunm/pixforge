@@ -21,7 +21,12 @@ func (ar AR) Float64() float64 {
 }
 
 func NewAspectRatioFrom(width int, height int) AR {
+	if width == 0 || height == 0 {
+		return AR{Width: 0, Height: 0}
+	}
+
 	gcf := GreatCommonFactor(width, height)
+
 	return AR{
 		Width:  width / gcf,
 		Height: height / gcf,
@@ -104,12 +109,8 @@ type TenantOpts struct {
 }
 
 func GreatCommonFactor(a int, b int) int {
-	for a != b {
-		if b < a {
-			return GreatCommonFactor(a-b, b)
-		} else {
-			return GreatCommonFactor(a, b-a)
-		}
+	for b != 0 {
+		a, b = b, a%b
 	}
 	return a
 }
