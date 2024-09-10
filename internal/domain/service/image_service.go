@@ -15,7 +15,7 @@ type GetImageOpts struct {
 	Width      *int
 	Height     *int
 	Ar         *domain.AR
-	Type       *domain.ImageType
+	Type       domain.ImageType
 }
 
 type ImageServiceInterface interface {
@@ -72,10 +72,10 @@ func (i ImageService) GetImage(ctx context.Context, opts GetImageOpts) ([]byte, 
 	// determineDimensions
 	targetWidth, targetHeight = determineDimensions(opts, parentImageSpec.Width, parentImageSpec.Height)
 	// determineImageFormat
-	if opts.Type == nil {
+	if opts.Type == domain.ImageType_AUTO {
 		targetImageFormat = parentImageSpec.Format
 	} else {
-		targetImageFormat = *opts.Type
+		targetImageFormat = opts.Type
 	}
 	// fetch childImage
 	childImage, err := i.storageService.GetChildImage(opts.Name, targetImageFormat, targetWidth, targetHeight, opts.TenantOpts)
@@ -92,6 +92,10 @@ func (i ImageService) GetImage(ctx context.Context, opts GetImageOpts) ([]byte, 
 			if errors.Is(err, appsvc.ErrNoMatchingFile) {
 				return nil, ErrNotFound
 			}
+			return nil, errors.New("internal error")
+		}
+		parentImageSpec, err = i.processorService.GetSpec(parentImage)
+		if err != nil {
 			return nil, errors.New("internal error")
 		}
 	}
@@ -177,7 +181,7 @@ func (gio GetImageOpts) SetAr(ar domain.AR) GetImageOpts {
 }
 
 func (gio GetImageOpts) SetFormat(format domain.ImageType) GetImageOpts {
-	gio.Type = &format
+	gio.Type = format
 	return gio
 }
 
@@ -245,7 +249,7 @@ func calculateScale(originalWidth, originalHeight int, targetWidth, targetHeight
 }
 
 func parentImageNeedsToBeFetched(opts GetImageOpts) bool {
-	return opts.Type == nil || originalDimensionsNeeded(opts)
+	return opts.Type == domain.ImageType_AUTO || originalDimensionsNeeded(opts)
 }
 
 func originalDimensionsNeeded(opts GetImageOpts) bool {

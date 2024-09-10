@@ -129,10 +129,10 @@ func TestGetImage(t *testing.T) {
 				Format: domain.ImageType_AVIF,
 			}
 			var childImageFormat domain.ImageType
-			if tc.opts.Type == nil {
+			if tc.opts.Type == domain.ImageType_AUTO {
 				childImageFormat = parentImageSpec.Format
 			} else {
-				childImageFormat = *tc.opts.Type
+				childImageFormat = tc.opts.Type
 			}
 
 			normalizedWidth, normalizedHeight := determineDimensions(tc.opts, parentImageSpec.Width, parentImageSpec.Height)

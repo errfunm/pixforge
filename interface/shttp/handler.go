@@ -121,7 +121,7 @@ func distinguishImageType(acceptHeader []string) domain.ImageType {
 	} else if slices.Contains(acceptHeader, "image/webp") {
 		return domain.ImageType_WEBP
 	} else {
-		return domain.ImageType_JPEG
+		return domain.ImageType_AUTO
 	}
 }
 

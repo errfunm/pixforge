@@ -55,7 +55,8 @@ func ParseAspectRatio(str string) (AR, error) {
 type ImageType int
 
 const (
-	ImageType_AVIF ImageType = iota
+	ImageType_AUTO ImageType = iota
+	ImageType_AVIF
 	ImageType_WEBP
 	ImageType_JPEG
 	ImageType_PNG
@@ -71,6 +72,8 @@ func (imgT ImageType) String() string {
 		return "jpeg"
 	case ImageType_PNG:
 		return "png"
+	case ImageType_AUTO:
+		return "auto"
 	default:
 		return "unknown"
 	}
@@ -98,6 +101,8 @@ func ImageTypeFromString(imgTypeStr string) (ImageType, error) {
 		return ImageType_PNG, nil
 	case ".png":
 		return ImageType_PNG, nil
+	case "auto":
+		return ImageType_AUTO, nil
 	default:
 		return -1, fmt.Errorf("unsupported image format: %v", imgTypeStr)
 	}
